@@ -9,10 +9,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { sentToEmails, smtpUser, smtpPassword } = req.body;
+    const { sentToEmails, smtpUser: requestSmtpUser, smtpPassword: requestSmtpPassword } = req.body;
+
+    // Use environment variables first, fallback to request body
+    const smtpUser = process.env.SMTP_USER || requestSmtpUser;
+    const smtpPassword = process.env.SMTP_PASSWORD || requestSmtpPassword;
 
     if (!smtpUser || !smtpPassword) {
-      return res.status(400).json({ error: 'Missing SMTP credentials' });
+      return res.status(400).json({
+        error: 'Missing SMTP credentials',
+        details: 'Set SMTP_USER and SMTP_PASSWORD environment variables'
+      });
     }
 
     const client = new ImapFlow({

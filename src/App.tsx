@@ -2208,8 +2208,15 @@ const AppContent = () => {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Kon e-mail niet verzenden.');
+          let errorMessage = 'Kon e-mail niet verzenden.';
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.details || errorData.error || errorMessage;
+          } catch {
+            // Response wasn't JSON (likely HTML error page)
+            errorMessage = `Server error (${response.status}). Make sure API endpoints are running.`;
+          }
+          throw new Error(errorMessage);
         }
 
         // Keep draft as draft (don't change status) and sync the email address
