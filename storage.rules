@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // NOTE: This app currently has no authentication
+    // For better security, implement Firebase Authentication
+
+    // Files directory - limit file size to 10MB
+    match /files/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 10 * 1024 * 1024;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "acquimail-ai",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^12.6.0",
+    "imapflow": "^1.2.1",
+    "lucide-react": "^0.556.0",
+    "mailparser": "^3.9.1",
+    "openai": "^6.10.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "recharts": "^3.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/nodemailer": "^7.0.4",
+    "@vercel/node": "^5.5.16",
+    "@vitejs/plugin-react": "^5.0.0",
+    "nodemailer": "^7.0.11",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

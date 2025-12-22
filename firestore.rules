@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // NOTE: This app currently has no authentication
+    // For better security, implement Firebase Authentication
+    // and restrict access to authenticated users only
+
+    // Leads collection
+    match /leads/{leadId} {
+      allow read, write: if true;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+
+    // Tasks collection
+    match /tasks/{taskId} {
+      allow read, write: if true;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+
+    // Email drafts collection
+    match /drafts/{draftId} {
+      allow read, write: if true;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+
+    // Incoming emails collection
+    match /emails/{emailId} {
+      allow read, write: if true;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+
+    // Files collection
+    match /files/{fileId} {
+      allow read, write: if true;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+
+    // Settings collection
+    match /settings/{settingId} {
+      allow read, write: if true;
+      // TODO: Add authentication and restrict to: request.auth != null
+    }
+  }
+}

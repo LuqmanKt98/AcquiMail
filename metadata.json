@@ -1,0 +1,7 @@
+{
+  "name": "AcquiMail AI",
+  "description": "Een intelligente CRM en e-mail tool om gepersonaliseerde acquisitie e-mails te genereren en te beheren.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
