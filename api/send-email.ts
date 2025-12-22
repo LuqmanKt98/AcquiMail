@@ -14,15 +14,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Validate SMTP config
-    if (!smtpConfig.host || !smtpConfig.port || !smtpConfig.user || !smtpConfig.pass) {
-      console.error('Invalid SMTP config:', {
-        hasHost: !!smtpConfig.host,
-        hasPort: !!smtpConfig.port,
-        hasUser: !!smtpConfig.user,
-        hasPass: !!smtpConfig.pass
+    // Validate SMTP config with detailed error messages
+    const missingFields = [];
+    if (!smtpConfig.host) missingFields.push('SMTP Host');
+    if (!smtpConfig.port) missingFields.push('SMTP Port');
+    if (!smtpConfig.user) missingFields.push('SMTP User/Email');
+    if (!smtpConfig.pass) missingFields.push('SMTP Password');
+
+    if (missingFields.length > 0) {
+      console.error('Invalid SMTP config - missing fields:', missingFields);
+      return res.status(400).json({
+        error: 'Invalid SMTP configuration',
+        details: `Missing: ${missingFields.join(', ')}. Please configure SMTP settings.`
       });
-      return res.status(400).json({ error: 'Invalid SMTP configuration' });
     }
 
     console.log('Sending email:', { to, subject, attachmentCount: attachments?.length || 0 });
