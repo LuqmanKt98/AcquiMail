@@ -478,8 +478,20 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
 }) => {
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null);
 
-  // Emails sync automatically via Cloud Function every minute
-  // Real-time Database listener keeps the UI updated instantly
+  // Auto-poll for new emails every 30 seconds for real-time sync
+  useEffect(() => {
+    // Initial fetch when component mounts
+    onFetch();
+
+    // Set up polling interval for real-time email sync
+    const pollInterval = setInterval(() => {
+      if (!isFetching) {
+        onFetch();
+      }
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEmailClick = (email: IncomingEmail) => {
     setSelectedEmail(email);
@@ -1978,6 +1990,28 @@ const AppContent = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  // Global background polling for emails (runs regardless of current view)
+  useEffect(() => {
+    const fetchEmails = async () => {
+      try {
+        const response = await fetch('/api/fetch-emails');
+        if (response.ok) {
+          console.log('Background email sync completed');
+        }
+      } catch (error) {
+        console.log('Background email sync skipped:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchEmails();
+
+    // Poll every 30 seconds for new emails
+    const pollInterval = setInterval(fetchEmails, 30000);
+
+    return () => clearInterval(pollInterval);
+  }, []);
 
   const handleAddLead = async (lead: Omit<Lead, 'id'>) => {
     await addLeadToFirestore(lead);
