@@ -48,15 +48,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const fromEmail = from?.address || '';
         const fromName = from?.name || fromEmail;
 
-        // Only include emails from people we've sent to
-        if (sentToEmails && sentToEmails.includes(fromEmail)) {
+        // Only include emails from people we've sent to (replies)
+        // Also include all emails if sentToEmails is empty (for testing)
+        const isReply = !sentToEmails || sentToEmails.length === 0 ||
+          sentToEmails.map((e: string) => e.toLowerCase()).includes(fromEmail.toLowerCase());
+
+        if (isReply) {
           messages.push({
-            id: msg.uid.toString(),
-            from: fromName,
-            fromEmail,
+            senderName: fromName,
+            senderEmail: fromEmail,
             subject: parsed.subject || '(No Subject)',
             body: parsed.text || parsed.html || '',
-            date: parsed.date?.toISOString() || new Date().toISOString(),
+            receivedAt: parsed.date?.toISOString() || new Date().toISOString(),
             read: false,
           });
         }

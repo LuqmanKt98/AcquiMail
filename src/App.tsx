@@ -444,6 +444,21 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
 }) => {
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null);
 
+  // Auto-poll for new emails every 60 seconds
+  useEffect(() => {
+    // Initial fetch when component mounts
+    onFetch();
+
+    // Set up polling interval
+    const pollInterval = setInterval(() => {
+      if (!isFetching) {
+        onFetch();
+      }
+    }, 60000); // Poll every 60 seconds
+
+    return () => clearInterval(pollInterval);
+  }, []); // Only run on mount
+
   const handleEmailClick = (email: IncomingEmail) => {
     setSelectedEmail(email);
     if (!email.read) {
