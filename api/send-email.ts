@@ -39,12 +39,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // Prepare attachments if provided
-    const emailAttachments = attachments?.map((att: any) => ({
-      filename: att.filename,
-      content: att.content, // base64 string
-      encoding: 'base64',
-      contentType: att.contentType
-    })) || [];
+    // Prepare attachments if provided
+    const emailAttachments = attachments?.map((att: any) => {
+      if (att.content) {
+        return {
+          filename: att.filename,
+          content: att.content, // base64 string
+          encoding: 'base64',
+          contentType: att.contentType
+        };
+      } else if (att.path) {
+        return {
+          filename: att.filename,
+          path: att.path, // URL to file
+          contentType: att.contentType
+        };
+      }
+      return null;
+    }).filter(Boolean) || [];
 
     console.log('Prepared attachments:', emailAttachments.length);
 

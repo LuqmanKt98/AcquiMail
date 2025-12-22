@@ -82,7 +82,8 @@ const docToFile = (doc: DocumentData, id: string): FileAsset => ({
     size: doc.size || 0,
     downloadUrl: doc.downloadUrl || '',
     storagePath: doc.storagePath || '',
-    uploadedAt: doc.uploadedAt || ''
+    uploadedAt: doc.uploadedAt || '',
+    base64Content: doc.base64Content // Include base64Content if it exists
 });
 
 // ============ LEADS ============

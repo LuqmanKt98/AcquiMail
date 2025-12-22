@@ -2148,7 +2148,7 @@ const AppContent = () => {
             const file = files.find(f => f.id === attId);
             console.log(`Looking for attachment ${attId}, found:`, file ? `${file.name} (${file.type})` : 'NOT FOUND');
             if (file) {
-              // Use stored base64 content (no download needed, no CORS issues!)
+              // Try base64 first
               if (file.base64Content) {
                 attachments.push({
                   filename: file.name,
@@ -2156,7 +2156,17 @@ const AppContent = () => {
                   content: file.base64Content
                 });
                 console.log(`✅ Added attachment from stored base64: ${file.name}, length: ${file.base64Content.length}`);
-              } else {
+              }
+              // Fallback to download URL if available (backend api updated to support 'path')
+              else if (file.downloadUrl) {
+                attachments.push({
+                  filename: file.name,
+                  contentType: file.type,
+                  path: file.downloadUrl
+                });
+                console.log(`✅ Added attachment from URL: ${file.name}`);
+              }
+              else {
                 console.warn(`⚠️ File ${file.name} has no base64Content stored. Please re-upload this file.`);
                 addToast({
                   type: 'info',
