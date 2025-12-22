@@ -170,10 +170,10 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
       proxy: {
-        '/api/openai': {
-          target: 'https://api.openai.com',
+        '/api/openai-proxy': {
+          target: 'https://api.openai.com/v1/chat/completions',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/openai/, ''),
+          rewrite: (path) => '',
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq) => {
               const apiKey = env.VITE_OPENAI_API_KEY;

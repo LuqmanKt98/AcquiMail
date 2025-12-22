@@ -1,8 +1,9 @@
 import { Lead } from "../types";
 
-// Use the Vite proxy to avoid CORS issues
-// The actual API key is added by the Vite proxy server
-const API_BASE_URL = '/api/openai/v1';
+// Use Vercel serverless function to proxy OpenAI requests
+// In development, Vite proxy handles this
+// In production, /api/openai-proxy serverless function handles this
+const API_BASE_URL = '/api/openai-proxy';
 
 export interface GeneratedEmailResponse {
     subject: string;
@@ -14,7 +15,7 @@ const callOpenAI = async (messages: Array<{ role: string, content: string }>): P
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     try {
-        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+        const response = await fetch(API_BASE_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
