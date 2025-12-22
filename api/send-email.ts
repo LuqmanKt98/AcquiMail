@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { to, subject, html, smtpConfig } = req.body;
+    const { to, subject, html, smtpConfig, attachments } = req.body;
 
     if (!to || !subject || !html || !smtpConfig) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -25,12 +25,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
+    // Prepare attachments if provided
+    const emailAttachments = attachments?.map((att: any) => ({
+      filename: att.filename,
+      content: att.content, // base64 string
+      encoding: 'base64',
+      contentType: att.contentType
+    })) || [];
+
     // Send email
     await transporter.sendMail({
       from: smtpConfig.fromEmail,
       to,
       subject,
       html,
+      attachments: emailAttachments,
     });
 
     return res.status(200).json({ success: true });

@@ -2192,7 +2192,8 @@ const AppContent = () => {
             to: recipientEmail, // Use current lead email instead of draft.leadEmail
             subject: draft.subject,
             html: draft.body,
-            smtpConfig: smtpConfig
+            smtpConfig: smtpConfig,
+            attachments: attachments // Include attachments in the request
           })
         });
 
