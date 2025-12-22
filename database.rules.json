@@ -1,0 +1,47 @@
+{
+    "rules": {
+        "leads": {
+            ".read": true,
+            ".write": true,
+            ".indexOn": [
+                "name"
+            ]
+        },
+        "tasks": {
+            ".read": true,
+            ".write": true,
+            ".indexOn": [
+                "dueDate"
+            ]
+        },
+        "drafts": {
+            ".read": true,
+            ".write": true,
+            ".indexOn": [
+                "generatedAt"
+            ]
+        },
+        "emails": {
+            ".read": true,
+            ".write": true,
+            ".indexOn": [
+                "receivedAt"
+            ]
+        },
+        "files": {
+            ".read": true,
+            ".write": true,
+            ".indexOn": [
+                "uploadedAt"
+            ]
+        },
+        "deletedEmails": {
+            ".read": true,
+            ".write": true
+        },
+        "settings": {
+            ".read": true,
+            ".write": true
+        }
+    }
+}

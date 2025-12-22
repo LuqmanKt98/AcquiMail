@@ -65,7 +65,7 @@ import {
   onSmtpConfigChange,
   deleteLead as deleteLeadFromFirestore,
   deleteFileMetadata as deleteFileMetadataFromFirestore
-} from './services/firestoreService';
+} from './services/realtimeDbService';
 import { uploadFileWithProgress, deleteFile as deleteFileFromStorage } from './services/storageService';
 
 // --- Helper for Speech Recognition ---
@@ -207,14 +207,32 @@ const Sidebar = ({
   currentView,
   setView,
   isOpen,
-  closeMenu
+  closeMenu,
+  unreadEmails = 0,
+  newTasks = 0
 }: {
   currentView: ViewState,
   setView: (v: ViewState) => void,
   isOpen: boolean,
-  closeMenu: () => void
+  closeMenu: () => void,
+  unreadEmails?: number,
+  newTasks?: number
 }) => {
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  // Track last seen counts to detect new items
+  const [lastSeenEmails, setLastSeenEmails] = useState<number>(() => {
+    const stored = localStorage.getItem('lastSeenEmailCount');
+    return stored ? parseInt(stored, 10) : 0;
+  });
+  const [lastSeenTasks, setLastSeenTasks] = useState<number>(() => {
+    const stored = localStorage.getItem('lastSeenTaskCount');
+    return stored ? parseInt(stored, 10) : 0;
+  });
+
+  // Determine if there are NEW items (more than last seen)
+  const hasNewEmails = unreadEmails > lastSeenEmails;
+  const hasNewTasks = newTasks > lastSeenTasks;
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -225,6 +243,20 @@ const Sidebar = ({
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
+  // When clicking on inbox, mark emails as "seen"
+  const handleViewChange = (viewId: string) => {
+    if (viewId === 'inbox') {
+      setLastSeenEmails(unreadEmails);
+      localStorage.setItem('lastSeenEmailCount', unreadEmails.toString());
+    }
+    if (viewId === 'tasks') {
+      setLastSeenTasks(newTasks);
+      localStorage.setItem('lastSeenTaskCount', newTasks.toString());
+    }
+    setView(viewId as ViewState);
+    closeMenu();
+  };
+
   const handleInstallClick = async () => {
     if (!installPrompt) return;
     installPrompt.prompt();
@@ -234,10 +266,11 @@ const Sidebar = ({
     }
   };
 
-  const menuItems = [
+  // Define menu items with notification dot flag
+  const menuItems: Array<{ id: string, label: string, icon: any, hasNotification?: boolean }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'inbox', label: 'Inbox', icon: Inbox },
-    { id: 'tasks', label: 'Taken & Agenda', icon: Calendar },
+    { id: 'inbox', label: 'Inbox', icon: Inbox, hasNotification: hasNewEmails },
+    { id: 'tasks', label: 'Taken & Agenda', icon: Calendar, hasNotification: hasNewTasks },
     { id: 'crm', label: 'Relatiebeheer', icon: Users },
     { id: 'library', label: 'Bibliotheek', icon: FolderOpen },
     { id: 'generator', label: 'AI Generator', icon: Wand2 },
@@ -276,17 +309,18 @@ const Sidebar = ({
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  setView(item.id as ViewState);
-                  closeMenu();
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${currentView === item.id
+                onClick={() => handleViewChange(item.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative ${currentView === item.id
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   }`}
               >
                 <Icon size={20} />
                 <span className="font-medium">{item.label}</span>
+                {/* Blinking Notification Dot */}
+                {item.hasNotification && currentView !== item.id && (
+                  <span className="absolute right-4 w-2.5 h-2.5 bg-blue-400 rounded-full animate-pulse shadow-lg shadow-blue-400/50" />
+                )}
               </button>
             );
           })}
@@ -444,20 +478,8 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
 }) => {
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null);
 
-  // Auto-poll for new emails every 60 seconds
-  useEffect(() => {
-    // Initial fetch when component mounts
-    onFetch();
-
-    // Set up polling interval
-    const pollInterval = setInterval(() => {
-      if (!isFetching) {
-        onFetch();
-      }
-    }, 60000); // Poll every 60 seconds
-
-    return () => clearInterval(pollInterval);
-  }, []); // Only run on mount
+  // Emails sync automatically via Cloud Function every minute
+  // Real-time Database listener keeps the UI updated instantly
 
   const handleEmailClick = (email: IncomingEmail) => {
     setSelectedEmail(email);
@@ -2476,6 +2498,8 @@ const AppContent = () => {
         setView={setView}
         isOpen={isMobileMenuOpen}
         closeMenu={() => setIsMobileMenuOpen(false)}
+        unreadEmails={emails.filter(e => !e.read).length}
+        newTasks={tasks.filter(t => !t.completed).length}
       />
 
       <div className="flex-1 md:ml-64 transition-all duration-300">

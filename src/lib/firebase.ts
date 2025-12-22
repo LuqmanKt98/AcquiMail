@@ -2,6 +2,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getDatabase } from 'firebase/database';
 
 // Your web app's Firebase configuration
 // These values can be public as they're meant for client-side apps
@@ -13,14 +14,18 @@ const firebaseConfig = {
     storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "acquimail-44077.firebasestorage.app",
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "608685088990",
     appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:608685088990:web:237d06ff4ab3094cfd624f",
-    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-RPK7DQ992Z"
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-RPK7DQ992Z",
+    databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://acquimail-44077-default-rtdb.europe-west1.firebasedatabase.app"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore
+// Initialize Firestore (kept for backwards compatibility during migration)
 export const db = getFirestore(app);
+
+// Initialize Realtime Database
+export const realtimeDb = getDatabase(app);
 
 // Initialize Storage
 export const storage = getStorage(app);
