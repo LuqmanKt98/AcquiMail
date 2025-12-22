@@ -96,7 +96,11 @@ export const onLeadsChange = (callback: (leads: Lead[]) => void) => {
 };
 
 export const addLead = async (lead: Omit<Lead, 'id'>): Promise<string> => {
-    const docRef = await addDoc(leadsCollection, lead);
+    // Remove undefined fields to prevent Firebase errors
+    const cleanData = Object.fromEntries(
+        Object.entries(lead).filter(([_, v]) => v !== undefined)
+    );
+    const docRef = await addDoc(leadsCollection, cleanData);
     return docRef.id;
 };
 
@@ -124,7 +128,11 @@ export const onTasksChange = (callback: (tasks: Task[]) => void) => {
 };
 
 export const addTask = async (task: Omit<Task, 'id'>): Promise<string> => {
-    const docRef = await addDoc(tasksCollection, task);
+    // Remove undefined fields to prevent Firebase errors
+    const cleanData = Object.fromEntries(
+        Object.entries(task).filter(([_, v]) => v !== undefined)
+    );
+    const docRef = await addDoc(tasksCollection, cleanData);
     return docRef.id;
 };
 
@@ -151,7 +159,11 @@ export const onDraftsChange = (callback: (drafts: EmailDraft[]) => void) => {
 };
 
 export const addDraft = async (draft: Omit<EmailDraft, 'id'>): Promise<string> => {
-    const docRef = await addDoc(draftsCollection, draft);
+    // Remove undefined fields to prevent Firebase errors
+    const cleanData = Object.fromEntries(
+        Object.entries(draft).filter(([_, v]) => v !== undefined)
+    );
+    const docRef = await addDoc(draftsCollection, cleanData);
     return docRef.id;
 };
 
@@ -177,7 +189,11 @@ export const onEmailsChange = (callback: (emails: IncomingEmail[]) => void) => {
 };
 
 export const addEmail = async (email: Omit<IncomingEmail, 'id'>): Promise<string> => {
-    const docRef = await addDoc(emailsCollection, email);
+    // Remove undefined fields to prevent Firebase errors
+    const cleanData = Object.fromEntries(
+        Object.entries(email).filter(([_, v]) => v !== undefined)
+    );
+    const docRef = await addDoc(emailsCollection, cleanData);
     return docRef.id;
 };
 
@@ -235,7 +251,11 @@ export const onFilesChange = (callback: (files: FileAsset[]) => void) => {
 };
 
 export const addFileMetadata = async (file: Omit<FileAsset, 'id'>): Promise<string> => {
-    const docRef = await addDoc(filesCollection, file);
+    // Remove undefined fields to prevent Firebase errors
+    const cleanData = Object.fromEntries(
+        Object.entries(file).filter(([_, v]) => v !== undefined)
+    );
+    const docRef = await addDoc(filesCollection, cleanData);
     return docRef.id;
 };
 
