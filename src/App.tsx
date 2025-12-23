@@ -477,8 +477,9 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
   isFetching: boolean
 }) => {
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Auto-poll for new emails every 30 seconds for real-time sync
+  // Auto-poll for new emails every 10 seconds for real-time sync
   useEffect(() => {
     // Initial fetch when component mounts
     onFetch();
@@ -510,6 +511,34 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
     }
   };
 
+  const toggleSelection = (e: React.MouseEvent, emailId: string) => {
+    e.stopPropagation();
+    const newSet = new Set(selectedIds);
+    if (newSet.has(emailId)) {
+      newSet.delete(emailId);
+    } else {
+      newSet.add(emailId);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === emails.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(emails.map(e => e.id)));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    if (window.confirm(`Weet je zeker dat je ${selectedIds.size} e-mail(s) wilt verwijderen?`)) {
+      selectedIds.forEach(id => deleteEmail(id));
+      setSelectedIds(new Set());
+      setSelectedEmail(null);
+    }
+  };
+
   const closeModal = () => {
     setSelectedEmail(null);
   };
@@ -520,17 +549,45 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           <Inbox className="text-blue-600" /> Inbox
         </h2>
-        <button
-          onClick={onFetch}
-          disabled={isFetching}
-          className="flex items-center gap-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all font-medium disabled:opacity-50"
-        >
-          {isFetching ? <LoadingSpinner /> : <RefreshCw size={18} className={isFetching ? 'animate-spin' : ''} />}
-          {isFetching ? 'Controleren...' : 'Vernieuwen'}
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl shadow-sm hover:bg-red-600 transition-all font-medium"
+            >
+              <Trash2 size={18} />
+              Verwijder ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={onFetch}
+            disabled={isFetching}
+            className="flex items-center gap-2 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all font-medium disabled:opacity-50"
+          >
+            {isFetching ? <LoadingSpinner /> : <RefreshCw size={18} className={isFetching ? 'animate-spin' : ''} />}
+            {isFetching ? 'Controleren...' : 'Vernieuwen'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+        {/* Select All Header */}
+        {emails.length > 0 && (
+          <div className="px-5 py-3 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700 flex items-center gap-3">
+            <button
+              onClick={toggleSelectAll}
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedIds.size === emails.length && emails.length > 0
+                ? 'bg-blue-500 border-blue-500 text-white'
+                : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'
+                }`}
+            >
+              {selectedIds.size === emails.length && emails.length > 0 && <Check size={12} strokeWidth={3} />}
+            </button>
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {selectedIds.size > 0 ? `${selectedIds.size} geselecteerd` : 'Alles selecteren'}
+            </span>
+          </div>
+        )}
         <div className="divide-y divide-slate-100 dark:divide-slate-700">
           {emails.length === 0 ? (
             <div className="p-20 text-center text-slate-500">
@@ -548,7 +605,17 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
                 onClick={() => handleEmailClick(email)}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    {/* Selection Checkbox */}
+                    <button
+                      onClick={(e) => toggleSelection(e, email.id)}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${selectedIds.has(email.id)
+                        ? 'bg-blue-500 border-blue-500 text-white'
+                        : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'
+                        }`}
+                    >
+                      {selectedIds.has(email.id) && <Check size={12} strokeWidth={3} />}
+                    </button>
                     <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300 text-xs">
                       {email.senderName.charAt(0)}
                     </div>
@@ -741,6 +808,7 @@ const TasksView = ({
   leads: Lead[]
 }) => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -760,16 +828,71 @@ const TasksView = ({
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   });
 
+  const toggleSelection = (taskId: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(taskId)) {
+      newSet.delete(taskId);
+    } else {
+      newSet.add(taskId);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === tasks.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(tasks.map(t => t.id)));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    if (window.confirm(`Weet je zeker dat je ${selectedIds.size} taak/taken wilt verwijderen?`)) {
+      selectedIds.forEach(id => deleteTask(id));
+      setSelectedIds(new Set());
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           <Calendar className="text-blue-600" /> Taken & Agenda
         </h2>
-        <span className="text-sm text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
-          {tasks.filter(t => !t.completed).length} openstaand
-        </span>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-xl shadow-sm hover:bg-red-600 transition-all font-medium"
+            >
+              <Trash2 size={18} />
+              Verwijder ({selectedIds.size})
+            </button>
+          )}
+          <span className="text-sm text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700">
+            {tasks.filter(t => !t.completed).length} openstaand
+          </span>
+        </div>
       </div>
+
+      {/* Select All Header */}
+      {tasks.length > 0 && (
+        <div className="flex items-center gap-3 px-2">
+          <button
+            onClick={toggleSelectAll}
+            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedIds.size === tasks.length && tasks.length > 0
+              ? 'bg-blue-500 border-blue-500 text-white'
+              : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'
+              }`}
+          >
+            {selectedIds.size === tasks.length && tasks.length > 0 && <Check size={12} strokeWidth={3} />}
+          </button>
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            {selectedIds.size > 0 ? `${selectedIds.size} geselecteerd` : 'Alles selecteren'}
+          </span>
+        </div>
+      )}
 
       <form onSubmit={handleAdd} className="flex gap-4">
         <div className="flex-1 relative">
@@ -803,6 +926,18 @@ const TasksView = ({
                 ${task.completed ? 'opacity-60 border-slate-100 dark:border-slate-800' : 'border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-900/50 hover:shadow-md'}
               `}
             >
+              {/* Selection Checkbox */}
+              <button
+                onClick={() => toggleSelection(task.id)}
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${selectedIds.has(task.id)
+                    ? 'bg-blue-500 border-blue-500 text-white'
+                    : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'
+                  }`}
+              >
+                {selectedIds.has(task.id) && <Check size={12} strokeWidth={3} />}
+              </button>
+
+              {/* Completion Checkbox */}
               <button
                 onClick={() => updateTask({ ...task, completed: !task.completed })}
                 className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0
@@ -1992,25 +2127,70 @@ const AppContent = () => {
   }, [theme]);
 
   // Global background polling for emails (runs regardless of current view)
+  const backgroundFetchRef = useRef<boolean>(false);
+
   useEffect(() => {
-    const fetchEmails = async () => {
+    const backgroundFetch = async () => {
+      // Prevent concurrent fetches
+      if (backgroundFetchRef.current) return;
+      backgroundFetchRef.current = true;
+
       try {
-        const response = await fetch('/api/fetch-emails');
+        // Get list of email addresses we've sent emails to
+        const sentToEmails = [...new Set(
+          drafts.map(d => d.leadEmail.toLowerCase())
+        )];
+
+        const response = await fetch('/api/fetch-emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sentToEmails,
+            smtpUser: smtpConfig.user,
+            smtpPassword: smtpConfig.pass
+          })
+        });
+
         if (response.ok) {
-          console.log('Background email sync completed');
+          const data = await response.json();
+          const newEmails = data.emails || [];
+          const deletedEmailIds = await getDeletedEmailIds();
+
+          for (const email of newEmails) {
+            // Use senderEmail + subject for duplicate check (ignore timestamp variations)
+            const isDuplicate = emails.some(e =>
+              e.senderEmail.toLowerCase() === email.senderEmail.toLowerCase() &&
+              e.subject === email.subject
+            );
+
+            // Check if deleted
+            const emailId = `${email.senderEmail}_${email.subject}_${email.receivedAt}`;
+            const wasDeleted = deletedEmailIds.has(emailId);
+
+            if (!isDuplicate && !wasDeleted) {
+              await addEmailToFirestore(email);
+              console.log('Background sync: Added new email:', email.subject);
+            }
+          }
         }
       } catch (error) {
-        console.log('Background email sync skipped:', error);
+        console.log('Background email sync error:', error);
+      } finally {
+        backgroundFetchRef.current = false;
       }
     };
 
-    // Initial fetch
-    fetchEmails();
+    // Initial fetch after a short delay
+    const initialTimeout = setTimeout(backgroundFetch, 2000);
 
-    const pollInterval = setInterval(fetchEmails, 10000); // Every 10 seconds
+    // Poll every 10 seconds
+    const pollInterval = setInterval(backgroundFetch, 10000);
 
-    return () => clearInterval(pollInterval);
-  }, []);
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(pollInterval);
+    };
+  }, [drafts, emails, smtpConfig]);
 
   const handleAddLead = async (lead: Omit<Lead, 'id'>) => {
     await addLeadToFirestore(lead);
@@ -2468,9 +2648,9 @@ const AppContent = () => {
           continue;
         }
 
+        // Use senderEmail + subject for duplicate check (ignore timestamp variations)
         const isDuplicate = emails.some(e =>
-          e.senderEmail === fetchedEmail.senderEmail &&
-          e.receivedAt === fetchedEmail.receivedAt &&
+          e.senderEmail.toLowerCase() === fetchedEmail.senderEmail.toLowerCase() &&
           e.subject === fetchedEmail.subject
         );
 
