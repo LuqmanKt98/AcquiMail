@@ -488,7 +488,7 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
       if (!isFetching) {
         onFetch();
       }
-    }, 30000); // Poll every 30 seconds
+    }, 10000); // Poll every 10 seconds for fast sync
 
     return () => clearInterval(pollInterval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2007,8 +2007,7 @@ const AppContent = () => {
     // Initial fetch
     fetchEmails();
 
-    // Poll every 30 seconds for new emails
-    const pollInterval = setInterval(fetchEmails, 30000);
+    const pollInterval = setInterval(fetchEmails, 10000); // Every 10 seconds
 
     return () => clearInterval(pollInterval);
   }, []);
