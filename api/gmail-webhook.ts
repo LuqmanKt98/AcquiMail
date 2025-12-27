@@ -56,10 +56,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
  */
 async function triggerEmailSync(historyId: string) {
     try {
-        const databaseURL = process.env.VITE_FIREBASE_DATABASE_URL;
+        // IMPORTANT: VITE_ prefix is NOT available in Vercel serverless functions at runtime
+        // Use FIREBASE_DATABASE_URL (without VITE_ prefix) for server-side
+        // Fallback to hardcoded URL to ensure it works
+        const databaseURL = process.env.FIREBASE_DATABASE_URL ||
+            'https://acquimail-44077-default-rtdb.europe-west1.firebasedatabase.app';
 
         if (!databaseURL) {
-            console.error('❌ VITE_FIREBASE_DATABASE_URL not set');
+            console.error('❌ FIREBASE_DATABASE_URL not set');
             return;
         }
 

@@ -1,5 +1,9 @@
 {
     "rules": {
+        "emailSyncTrigger": {
+            ".read": true,
+            ".write": true
+        },
         "leads": {
             ".read": true,
             ".write": true,
