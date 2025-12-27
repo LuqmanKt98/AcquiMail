@@ -39,6 +39,13 @@
             ".read": true,
             ".write": true
         },
+        "sentMessages": {
+            ".read": true,
+            ".write": true,
+            ".indexOn": [
+                "sentAt"
+            ]
+        },
         "settings": {
             ".read": true,
             ".write": true

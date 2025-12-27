@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "firebase": "^12.6.0",
+    "googleapis": "^169.0.0",
     "imapflow": "^1.2.1",
     "lucide-react": "^0.556.0",
     "mailparser": "^3.9.1",

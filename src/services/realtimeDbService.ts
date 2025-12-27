@@ -22,6 +22,7 @@ const DRAFTS_PATH = 'drafts';
 const EMAILS_PATH = 'emails';
 const FILES_PATH = 'files';
 const DELETED_EMAILS_PATH = 'deletedEmails';
+const SENT_MESSAGES_PATH = 'sentMessages'; // Track Gmail message IDs we've sent
 const SETTINGS_PATH = 'settings';
 
 // Helper to convert snapshot to typed array
@@ -222,8 +223,32 @@ export const onEmailsChange = (callback: (emails: IncomingEmail[]) => void) => {
     return unsubscribe;
 };
 
-export const addEmail = async (email: Omit<IncomingEmail, 'id'>): Promise<string> => {
+export const addEmail = async (email: Omit<IncomingEmail, 'id'> & { messageId?: string }): Promise<string> => {
     const emailsRef = ref(realtimeDb, EMAILS_PATH);
+
+    // Check for duplicates - use Gmail message ID if available, otherwise use sender+subject+time
+    const snapshot = await get(emailsRef);
+    if (snapshot.exists()) {
+        const existingEmails = snapshotToArray(snapshot, docToEmail);
+
+        // Check if this exact email already exists
+        const isDuplicate = existingEmails.some(existing => {
+            // If we have Gmail message IDs, use those for exact matching
+            if (email.messageId && (existing as any).messageId) {
+                return (existing as any).messageId === email.messageId;
+            }
+            // Otherwise use sender, subject and received time
+            return existing.senderEmail === email.senderEmail &&
+                existing.subject === email.subject &&
+                existing.receivedAt === email.receivedAt;
+        });
+
+        if (isDuplicate) {
+            console.log(`⏭️  Skipping duplicate email: ${email.subject} from ${email.senderEmail}`);
+            throw new Error('DUPLICATE_EMAIL'); // Throw error to prevent adding
+        }
+    }
+
     const newRef = push(emailsRef);
     await set(newRef, cleanData(email));
     return newRef.key!;
@@ -353,3 +378,59 @@ export const onSmtpConfigChange = (callback: (config: SmtpConfig | null) => void
     });
     return unsubscribe;
 };
+
+// ============ SENT MESSAGES TRACKING ============
+
+/**
+ * Add a sent Gmail message ID to track for replies
+ */
+export const addSentMessageId = async (messageId: string, threadId: string, recipientEmail: string): Promise<void> => {
+    const sentRef = ref(realtimeDb, `${SENT_MESSAGES_PATH}/${messageId}`);
+    await set(sentRef, {
+        threadId,
+        recipientEmail,
+        sentAt: new Date().toISOString()
+    });
+};
+
+/**
+ * Get all sent Gmail message IDs
+ */
+export const getSentMessageIds = async (): Promise<string[]> => {
+    const sentRef = ref(realtimeDb, SENT_MESSAGES_PATH);
+    const snapshot = await get(sentRef);
+    const messageIds: string[] = [];
+
+    if (snapshot.exists()) {
+        snapshot.forEach((child) => {
+            messageIds.push(child.key!);
+        });
+    }
+
+    return messageIds;
+};
+
+/**
+ * Clean up old sent message IDs (optional - keep last 1000)
+ */
+export const cleanupOldSentMessages = async (): Promise<void> => {
+    const sentRef = ref(realtimeDb, SENT_MESSAGES_PATH);
+    const snapshot = await get(sentRef);
+
+    if (snapshot.exists()) {
+        const entries: Array<{ key: string; sentAt: string }> = [];
+        snapshot.forEach((child) => {
+            const data = child.val();
+            entries.push({ key: child.key!, sentAt: data.sentAt });
+        });
+
+        // Sort by date and keep only last 1000
+        entries.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+        const toDelete = entries.slice(1000);
+
+        for (const entry of toDelete) {
+            await remove(ref(realtimeDb, `${SENT_MESSAGES_PATH}/${entry.key}`));
+        }
+    }
+};
+

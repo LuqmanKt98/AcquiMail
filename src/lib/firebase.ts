@@ -3,6 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
+import { getAuth } from 'firebase/auth';
 
 // Your web app's Firebase configuration
 // These values can be public as they're meant for client-side apps
@@ -29,5 +30,8 @@ export const realtimeDb = getDatabase(app);
 
 // Initialize Storage
 export const storage = getStorage(app);
+
+// Initialize Authentication
+export const auth = getAuth(app);
 
 export default app;

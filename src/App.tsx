@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoadingSpinner from './components/LoadingSpinner';
 import { ToastProvider, useToast } from './components/ToastProvider';
+import { AuthProvider, useAuth } from './components/AuthContext';
+import Login from './components/Login';
 import {
   LayoutDashboard,
   Users,
@@ -37,11 +39,13 @@ import {
   CheckSquare,
   Repeat,
   PhoneCall,
-  Check
+  Check,
+  LogOut
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Lead, LeadStatus, EmailDraft, SmtpConfig, ViewState, FileAsset, IncomingEmail, LeadType, Task } from './types';
+import { Lead, LeadStatus, EmailDraft, ViewState, FileAsset, IncomingEmail, LeadType, Task } from './types';
 import { generateEmailForLead, generateFollowUpEmail, processCallLog, extractTasksFromPrompt, extractTasksFromEmail } from './services/openaiService';
+import { sendEmailProfessional, fetchEmailReplies, startEmailMonitoring } from './services/emailService';
 import {
   onLeadsChange,
   addLead as addLeadToFirestore,
@@ -61,8 +65,6 @@ import {
   getDeletedEmailIds,
   onFilesChange,
   addFileMetadata,
-  saveSmtpConfig,
-  onSmtpConfigChange,
   deleteLead as deleteLeadFromFirestore,
   deleteFileMetadata as deleteFileMetadataFromFirestore
 } from './services/realtimeDbService';
@@ -338,18 +340,62 @@ const Sidebar = ({
         )}
 
         <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 text-slate-400 px-4 py-2">
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shrink-0">
-              ME
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-medium text-white truncate">Mijn Bedrijf</p>
-              <p className="text-xs truncate">admin@one.com</p>
-            </div>
-          </div>
+          <SidebarUserProfile />
         </div>
       </div>
     </>
+  );
+};
+
+// Sidebar user profile component with logout
+const SidebarUserProfile = () => {
+  const { user, signOut } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (window.confirm('Weet je zeker dat je wilt uitloggen?')) {
+      setLoggingOut(true);
+      try {
+        await signOut();
+      } catch (error) {
+        console.error('Logout error:', error);
+        setLoggingOut(false);
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3 text-slate-400 px-4 py-2">
+        {user?.photoURL ? (
+          <img
+            src={user.photoURL}
+            alt={user.displayName || 'User'}
+            className="w-8 h-8 rounded-full shrink-0"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold shrink-0">
+            {user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}
+          </div>
+        )}
+        <div className="flex-1 overflow-hidden">
+          <p className="text-sm font-medium text-white truncate">
+            {user?.displayName || 'User'}
+          </p>
+          <p className="text-xs truncate">{user?.email}</p>
+        </div>
+      </div>
+      <button
+        onClick={handleLogout}
+        disabled={loggingOut}
+        className="w-full flex items-center gap-2 px-4 py-2 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg transition-colors disabled:opacity-50"
+      >
+        <LogOut size={18} />
+        <span className="text-sm font-medium">
+          {loggingOut ? 'Uitloggen...' : 'Uitloggen'}
+        </span>
+      </button>
+    </div>
   );
 };
 
@@ -479,20 +525,11 @@ const InboxView = ({ emails, markRead, deleteEmail, onFetch, isFetching }: {
   const [selectedEmail, setSelectedEmail] = useState<IncomingEmail | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Auto-poll for new emails every 10 seconds for real-time sync
+  // Note: Real-time email sync is handled globally by startEmailMonitoring (every 30s)
+  // No need for component-level polling
   useEffect(() => {
-    // Initial fetch when component mounts
-    onFetch();
-
-    // Set up polling interval for real-time email sync
-    const pollInterval = setInterval(() => {
-      if (!isFetching) {
-        onFetch();
-      }
-    }, 10000); // Poll every 10 seconds for fast sync
-
-    return () => clearInterval(pollInterval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Empty - Firebase listeners handle real-time updates automatically
+  }, []);
 
   const handleEmailClick = (email: IncomingEmail) => {
     setSelectedEmail(email);
@@ -809,6 +846,7 @@ const TasksView = ({
 }) => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -930,8 +968,8 @@ const TasksView = ({
               <button
                 onClick={() => toggleSelection(task.id)}
                 className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${selectedIds.has(task.id)
-                    ? 'bg-blue-500 border-blue-500 text-white'
-                    : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'border-slate-300 dark:border-slate-600 hover:border-blue-500'
                   }`}
               >
                 {selectedIds.has(task.id) && <Check size={12} strokeWidth={3} />}
@@ -947,7 +985,10 @@ const TasksView = ({
                 <Check size={14} strokeWidth={3} />
               </button>
 
-              <div className="flex-1 min-w-0">
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => setSelectedTask(task)}
+              >
                 <p className={`font-semibold text-slate-800 dark:text-slate-100 truncate ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
                   {task.title}
                 </p>
@@ -992,6 +1033,152 @@ const TasksView = ({
           ))
         )}
       </div>
+
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedTask(null)}>
+          <div
+            className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-start p-6 border-b border-slate-100 dark:border-slate-700">
+              <div className="flex-1">
+                <input
+                  className="text-xl font-bold text-slate-900 dark:text-white mb-2 bg-transparent border-none focus:outline-none w-full"
+                  value={selectedTask.title}
+                  onChange={(e) => {
+                    const updated = { ...selectedTask, title: e.target.value };
+                    setSelectedTask(updated);
+                    updateTask(updated);
+                  }}
+                />
+                {selectedTask.leadName && (
+                  <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                    <User size={14} />
+                    <span>{selectedTask.leadName}</span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors text-slate-500 dark:text-slate-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Due Date */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">
+                  <Calendar size={16} /> Vervaldatum
+                </label>
+                <input
+                  type="date"
+                  className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={selectedTask.dueDate}
+                  onChange={(e) => {
+                    const updated = { ...selectedTask, dueDate: e.target.value };
+                    setSelectedTask(updated);
+                    updateTask(updated);
+                  }}
+                />
+              </div>
+
+              {/* Priority */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Prioriteit</label>
+                <div className="flex gap-3">
+                  {(['low', 'medium', 'high'] as const).map((priority) => (
+                    <button
+                      key={priority}
+                      onClick={() => {
+                        const updated = { ...selectedTask, priority };
+                        setSelectedTask(updated);
+                        updateTask(updated);
+                      }}
+                      className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm uppercase tracking-wider transition-all ${selectedTask.priority === priority
+                          ? priority === 'high'
+                            ? 'bg-red-500 text-white shadow-lg'
+                            : priority === 'medium'
+                              ? 'bg-orange-500 text-white shadow-lg'
+                              : 'bg-slate-500 text-white shadow-lg'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        }`}
+                    >
+                      {priority}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Beschrijving</label>
+                <textarea
+                  className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none"
+                  rows={4}
+                  placeholder="Voeg een beschrijving toe..."
+                  value={selectedTask.description || ''}
+                  onChange={(e) => {
+                    const updated = { ...selectedTask, description: e.target.value };
+                    setSelectedTask(updated);
+                    updateTask(updated);
+                  }}
+                />
+              </div>
+
+              {/* Completion Status */}
+              <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                <button
+                  onClick={() => {
+                    const updated = { ...selectedTask, completed: !selectedTask.completed };
+                    setSelectedTask(updated);
+                    updateTask(updated);
+                  }}
+                  className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all ${selectedTask.completed
+                      ? 'bg-green-500 border-green-500 text-white'
+                      : 'border-slate-300 dark:border-slate-500 text-transparent hover:border-green-500 hover:scale-110'
+                    }`}
+                >
+                  <Check size={18} strokeWidth={3} />
+                </button>
+                <div>
+                  <p className="font-bold text-slate-800 dark:text-slate-100">
+                    {selectedTask.completed ? 'Voltooid' : 'Markeer als voltooid'}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {selectedTask.completed ? 'Deze taak is afgerond' : 'Taak is nog niet afgerond'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-100 dark:border-slate-700 flex justify-between">
+              <button
+                onClick={() => {
+                  if (window.confirm('Weet je zeker dat je deze taak wilt verwijderen?')) {
+                    deleteTask(selectedTask.id);
+                    setSelectedTask(null);
+                  }
+                }}
+                className="px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-medium"
+              >
+                Verwijder taak
+              </button>
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1764,7 +1951,6 @@ const ReviewView = ({
   updateDraft,
   sendEmails,
   deleteDraft,
-  smtpConfig,
   files,
   leads
 }: {
@@ -1772,10 +1958,10 @@ const ReviewView = ({
   updateDraft: (id: string, updates: Partial<EmailDraft>) => void,
   sendEmails: (ids: string[]) => void,
   deleteDraft: (id: string) => void,
-  smtpConfig: SmtpConfig,
   files: FileAsset[],
   leads: Lead[]
 }) => {
+  const { user } = useAuth(); // Get authenticated user
   const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'sent'>('pending');
 
@@ -1866,7 +2052,7 @@ const ReviewView = ({
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <span className="w-20 font-bold">Van:</span>
-                <span>{smtpConfig.fromEmail || 'Niet ingesteld (Gmail)'}</span>
+                <span>{user?.email || 'Gmail'}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <span className="w-20 font-bold">Onderwerp:</span>
@@ -1907,15 +2093,12 @@ const ReviewView = ({
               >
                 <Trash2 size={20} />
               </button>
-              <div className="flex gap-3">
-                <button className="hidden md:block px-4 py-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Opslaan als concept</button>
-                <button
-                  onClick={() => sendEmails([selectedDraft.id])}
-                  className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
-                >
-                  <Send size={18} /> Verstuur Nu
-                </button>
-              </div>
+              <button
+                onClick={() => sendEmails([selectedDraft.id])}
+                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
+              >
+                <Send size={18} /> Verstuur Nu
+              </button>
             </div>
           </>
         ) : (
@@ -1928,32 +2111,38 @@ const ReviewView = ({
 
 // 9. Settings Component
 const SettingsView = ({
-  config,
-  onSave,
   theme,
   setTheme
 }: {
-  config: SmtpConfig,
-  onSave: (c: SmtpConfig) => void,
   theme: string,
   setTheme: (t: string) => void
 }) => {
-  const [localConfig, setLocalConfig] = useState(config);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalConfig({ ...localConfig, [e.target.name]: e.target.value });
-  };
+  const { user } = useAuth();
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
 
       <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-slate-800 dark:text-slate-100">
-          <Settings /> One.com SMTP Instellingen
+          <Settings /> Instellingen
         </h2>
 
+        {/* Gmail Account Info */}
+        <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center gap-3">
+            <Mail className="text-blue-500" />
+            <div className="flex-1">
+              <p className="font-bold text-slate-800 dark:text-slate-100">Gmail Account</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{user?.email || 'Niet ingelogd'}</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+            E-mails worden verzonden via Gmail API met je Google account
+          </p>
+        </div>
+
         {/* Theme Toggle */}
-        <div className="mb-8 flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+        <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
           <div className="flex items-center gap-3">
             {theme === 'dark' ? <Moon className="text-blue-500" /> : <Sun className="text-orange-500" />}
             <div>
@@ -1963,85 +2152,27 @@ const SettingsView = ({
           </div>
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${theme === 'dark' ? 'bg-blue-600' : 'bg-slate-300'
+            className={`relative w-14 h-7 rounded-full transition-colors ${theme === 'dark' ? 'bg-blue-600' : 'bg-slate-300'
               }`}
           >
             <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${theme === 'dark' ? 'translate-x-6' : 'translate-x-1'
+              className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${theme === 'dark' ? 'translate-x-7' : 'translate-x-0'
                 }`}
             />
           </button>
         </div>
 
-        <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6 flex items-start gap-3">
-          <AlertCircle className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800 dark:text-blue-200">
-            <p className="font-bold mb-1">Let op: Browser Beperkingen</p>
-            <p>Omdat deze app in de browser draait, kunnen we niet direct verbinding maken met de SMTP server van One.com (vanwege security policies). In een productieomgeving zou je hier een backend server voor nodig hebben. Voor deze demo simuleren we de verzending.</p>
+        <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+          <div className="flex items-start gap-2">
+            <CheckCircle className="text-green-500 mt-0.5" size={20} />
+            <div>
+              <p className="font-medium text-green-800 dark:text-green-200">Gmail API Actief</p>
+              <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                Je app gebruikt nu de Gmail API voor professionele e-mail verzending en ontvangst.
+                Geen SMTP configuratie meer nodig!
+              </p>
+            </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="space-y-2">
-            <label className="text-sm font-bold text-slate-700 dark:text-slate-300">SMTP Host</label>
-            <input
-              name="host"
-              value={localConfig.host}
-              onChange={handleChange}
-              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="send.one.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">SMTP Poort</label>
-            <input
-              name="port"
-              value={localConfig.port}
-              onChange={handleChange}
-              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="465 of 587"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Gebruikersnaam (Email)</label>
-            <input
-              name="user"
-              value={localConfig.user}
-              onChange={handleChange}
-              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="jouw@email.nl"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Wachtwoord</label>
-            <input
-              type="password"
-              name="pass"
-              value={localConfig.pass}
-              onChange={handleChange}
-              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="••••••••"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Afzender Adres (From)</label>
-            <input
-              name="fromEmail"
-              value={localConfig.fromEmail}
-              onChange={handleChange}
-              className="w-full p-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              placeholder="jouw@email.nl"
-            />
-          </div>
-        </div>
-
-        <div className="mt-8 flex justify-end">
-          <button
-            onClick={() => onSave(localConfig)}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-blue-700"
-          >
-            <Save size={18} /> Instellingen Opslaan
-          </button>
         </div>
       </div>
     </div>
@@ -2052,6 +2183,7 @@ const SettingsView = ({
 // --- Main App Content ---
 const AppContent = () => {
   const { addToast, updateToast, removeToast } = useToast();
+  const { user } = useAuth(); // Get authenticated user
   const [view, setView] = useState<ViewState>('dashboard');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [emails, setEmails] = useState<IncomingEmail[]>([]);
@@ -2063,14 +2195,6 @@ const AppContent = () => {
 
   // Theme State
   const [theme, setTheme] = useState('light');
-
-  const [smtpConfig, setSmtpConfig] = useState<SmtpConfig>({
-    host: 'smtp.gmail.com',
-    port: '465',
-    user: import.meta.env.VITE_SMTP_USER || '',
-    pass: '',
-    fromEmail: import.meta.env.VITE_SMTP_USER || ''
-  });
 
   // Firebase Real-time Listeners
   useEffect(() => {
@@ -2099,13 +2223,6 @@ const AppContent = () => {
       setFiles(filesData);
     });
 
-    // Subscribe to SMTP config
-    const unsubSmtp = onSmtpConfigChange((config) => {
-      if (config) {
-        setSmtpConfig(config);
-      }
-    });
-
     // Cleanup subscriptions on unmount
     return () => {
       unsubLeads();
@@ -2113,7 +2230,6 @@ const AppContent = () => {
       unsubDrafts();
       unsubEmails();
       unsubFiles();
-      unsubSmtp();
     };
   }, []);
 
@@ -2126,71 +2242,19 @@ const AppContent = () => {
     }
   }, [theme]);
 
-  // Global background polling for emails (runs regardless of current view)
-  const backgroundFetchRef = useRef<boolean>(false);
-
+  // Real-time Gmail API email monitoring
   useEffect(() => {
-    const backgroundFetch = async () => {
-      // Prevent concurrent fetches
-      if (backgroundFetchRef.current) return;
-      backgroundFetchRef.current = true;
+    console.log('🚀 Starting Gmail API real-time monitoring...');
 
-      try {
-        // Get list of email addresses we've sent emails to
-        const sentToEmails = [...new Set(
-          drafts.map(d => d.leadEmail.toLowerCase())
-        )];
+    // Start monitoring - checks every 30 seconds
+    const stopMonitoring = startEmailMonitoring();
 
-        const response = await fetch('/api/fetch-emails', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sentToEmails,
-            smtpUser: smtpConfig.user,
-            smtpPassword: smtpConfig.pass
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const newEmails = data.emails || [];
-          const deletedEmailIds = await getDeletedEmailIds();
-
-          for (const email of newEmails) {
-            // Use senderEmail + subject for duplicate check (ignore timestamp variations)
-            const isDuplicate = emails.some(e =>
-              e.senderEmail.toLowerCase() === email.senderEmail.toLowerCase() &&
-              e.subject === email.subject
-            );
-
-            // Check if deleted
-            const emailId = `${email.senderEmail}_${email.subject}_${email.receivedAt}`;
-            const wasDeleted = deletedEmailIds.has(emailId);
-
-            if (!isDuplicate && !wasDeleted) {
-              await addEmailToFirestore(email);
-              console.log('Background sync: Added new email:', email.subject);
-            }
-          }
-        }
-      } catch (error) {
-        console.log('Background email sync error:', error);
-      } finally {
-        backgroundFetchRef.current = false;
-      }
-    };
-
-    // Initial fetch after a short delay
-    const initialTimeout = setTimeout(backgroundFetch, 2000);
-
-    // Poll every 10 seconds
-    const pollInterval = setInterval(backgroundFetch, 10000);
-
+    // Cleanup when component unmounts
     return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(pollInterval);
+      console.log('🛑 Stopping Gmail API monitoring');
+      stopMonitoring();
     };
-  }, [drafts, emails, smtpConfig]);
+  }, []); // Only run once on mount
 
   const handleAddLead = async (lead: Omit<Lead, 'id'>) => {
     await addLeadToFirestore(lead);
@@ -2270,7 +2334,7 @@ const AppContent = () => {
       for (const lead of pendingLeads) {
         const response = await generateFollowUpEmail(
           lead,
-          smtpConfig.fromEmail || 'Mijn Bedrijf'
+          user?.email || user?.displayName || 'AcquiMail'
         );
         const newDraft: Omit<EmailDraft, 'id'> = {
           leadId: lead.id,
@@ -2319,7 +2383,7 @@ const AppContent = () => {
         const response = await generateEmailForLead(
           lead,
           userPrompt,
-          smtpConfig.fromEmail || 'Mijn Bedrijf',
+          user?.email || user?.displayName || 'AcquiMail',
           attachmentNames
         );
         const newDraft: Omit<EmailDraft, 'id'> = {
@@ -2445,34 +2509,18 @@ const AppContent = () => {
 
         console.log(`Sending email to ${recipientEmail} with ${attachments.length} attachments`);
 
-        const response = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: recipientEmail, // Use current lead email instead of draft.leadEmail
-            subject: draft.subject,
-            html: draft.body,
-            smtpConfig: smtpConfig,
-            attachments: attachments // Include attachments in the request
-          })
+        // Send via Gmail API instead of SMTP
+        await sendEmailProfessional({
+          to: recipientEmail,
+          subject: draft.subject,
+          html: draft.body,
+          attachments: attachments
         });
 
-        if (!response.ok) {
-          let errorMessage = 'Kon e-mail niet verzenden.';
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData.details || errorData.error || errorMessage;
-          } catch {
-            // Response wasn't JSON (likely HTML error page)
-            errorMessage = `Server error (${response.status}). Make sure API endpoints are running.`;
-          }
-          throw new Error(errorMessage);
-        }
+        console.log(`✅ Email sent successfully to ${recipientEmail} via Gmail API`);
 
-        // Keep draft as draft (don't change status) and sync the email address
-        await updateDraftInFirestore(draft.id, {
-          leadEmail: recipientEmail // Update draft with current email
-        });
+        // Delete the draft after successful send
+        await deleteDraftFromFirestore(draft.id);
 
         // Update Lead status for sent draft
         if (currentLead) {
@@ -2603,106 +2651,22 @@ const AppContent = () => {
   const handleFetchEmails = async () => {
     try {
       setIsLoading(true);
+      console.log('📥 Fetching emails via Gmail API...');
 
-      // Get list of email addresses we've sent emails to (from all drafts)
-      const sentToEmails = [...new Set(
-        drafts.map(d => d.leadEmail.toLowerCase())
-      )];
+      // Use the professional Gmail API service
+      await fetchEmailReplies();
 
-      console.log('Fetching emails, filtering for replies from:', sentToEmails);
-
-      const response = await fetch('/api/fetch-emails', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sentToEmails,
-          smtpUser: smtpConfig.user,
-          smtpPassword: smtpConfig.pass
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Kon e-mails niet ophalen.');
-      }
-
-      const responseData = await response.json();
-      const newFetchedEmails: Omit<IncomingEmail, 'id'>[] = responseData.emails || [];
-
-      // Get list of deleted email IDs to filter them out
-      const deletedEmailIds = await getDeletedEmailIds();
-      console.log(`Found ${deletedEmailIds.size} previously deleted emails to filter out`);
-
-      // Filter out emails that might have the same subject/sender/date if we don't have unique UIDs
-      // Also filter out emails that were previously deleted
-      let addedCount = 0;
-      let tasksCount = 0;
-
-      for (const fetchedEmail of newFetchedEmails) {
-        // Check if this email was previously deleted
-        const emailId = `${fetchedEmail.senderEmail}_${fetchedEmail.subject}_${fetchedEmail.receivedAt}`;
-        const wasDeleted = deletedEmailIds.has(emailId);
-
-        if (wasDeleted) {
-          console.log(`Skipping previously deleted email: ${fetchedEmail.subject} from ${fetchedEmail.senderEmail}`);
-          continue;
-        }
-
-        // Use senderEmail + subject for duplicate check (ignore timestamp variations)
-        const isDuplicate = emails.some(e =>
-          e.senderEmail.toLowerCase() === fetchedEmail.senderEmail.toLowerCase() &&
-          e.subject === fetchedEmail.subject
-        );
-
-        if (!isDuplicate) {
-          // 1. Save to Firestore
-          await addEmailToFirestore(fetchedEmail);
-          addedCount++;
-
-          // 2. Extract tasks using AI
-          const taskResult = await extractTasksFromEmail(fetchedEmail.body, fetchedEmail.senderName);
-          if (taskResult.hasTasks && taskResult.tasks.length > 0) {
-            for (const t of taskResult.tasks) {
-              const newTask: Omit<Task, 'id'> = {
-                title: t.title,
-                description: t.description,
-                dueDate: t.dueDate,
-                priority: t.priority,
-                completed: false,
-                leadName: fetchedEmail.senderName,
-                // Try to find matching lead by email
-                leadId: leads.find(l => l.email === fetchedEmail.senderEmail)?.id
-              };
-              await addTaskToFirestore(newTask);
-              tasksCount++;
-            }
-          }
-        }
-      }
-
-      if (addedCount > 0) {
-        addToast({
-          type: 'success',
-          title: 'Inbox Bijgewerkt',
-          message: `${addedCount} nieuwe e-mail(s) ontvangen. AI heeft ${tasksCount} taken herkend en toegevoegd.`
-        });
-      } else {
-        addToast({ type: 'info', title: 'Inbox', message: 'Geen nieuwe berichten gevonden.' });
-      }
-
-    } catch (error: any) {
+      console.log('✅ Email fetch completed via Gmail API');
+      // No toast here - automatic monitoring runs every 30s, don't spam user
+    } catch (error) {
       console.error('Error fetching emails:', error);
-      addToast({ type: 'error', title: 'Ophaalfout', message: error.message });
+      addToast({ type: 'error', title: 'Fout', message: 'Kon e-mails niet ophalen. Check console voor details.' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSaveSmtpConfig = async (config: SmtpConfig) => {
-    await saveSmtpConfig(config);
-    setSmtpConfig(config);
-    addToast({ type: 'success', title: 'Opgeslagen', message: 'Instellingen zijn opgeslagen.' });
-  };
+  // SMTP config handler removed - using Gmail API now
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-200">
@@ -2784,7 +2748,6 @@ const AppContent = () => {
               sendEmails={handleSendEmails}
               updateDraft={handleUpdateDraft}
               deleteDraft={handleDeleteDraft}
-              smtpConfig={smtpConfig}
               files={files}
               leads={leads}
             />
@@ -2800,8 +2763,6 @@ const AppContent = () => {
 
           {view === 'settings' && (
             <SettingsView
-              config={smtpConfig}
-              onSave={handleSaveSmtpConfig}
               theme={theme}
               setTheme={setTheme}
             />
@@ -2815,9 +2776,30 @@ const AppContent = () => {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <AppContentWithAuth />
+        </ToastProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }
+
+// Wrapper to check auth state before rendering main app
+const AppContentWithAuth = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return <AppContent />;
+};

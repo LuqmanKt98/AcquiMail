@@ -233,26 +233,27 @@ export const extractTasksFromPrompt = async (
 
     Your task:
     1. Identify ANY tasks, agenda items, follow-ups, meetings, calls, deadlines, or action items mentioned in this instruction.
-    2. For EACH task found, extract:
-       - A clear task title
-       - A brief description
+    2. If you find MULTIPLE related tasks that are part of the same activity, CONSOLIDATE them into a SINGLE comprehensive task.
+    3. For the consolidated task, extract:
+       - A clear, comprehensive task title that captures all related activities
+       - A detailed description covering all aspects and action items
        - Due date (YYYY-MM-DD format). If a relative time is mentioned (e.g., "next week", "tomorrow", "in 3 days"), calculate the actual date from today (${today}). If no date is mentioned, use tomorrow's date.
        - Priority level: "high" (urgent, important, ASAP, critical), "medium" (normal follow-up, standard tasks), "low" (nice to have, when possible)
 
-    Examples of tasks to extract:
-    - "Schedule a follow-up call next week" → Task
-    - "Send proposal by Friday" → Task  
-    - "Remind me to check in with them" → Task
-    - "Set up a meeting for next Tuesday" → Task
-    - "Add to agenda: discuss pricing" → Task
+    IMPORTANT: Avoid creating duplicate tasks. If the instruction mentions the same activity in different ways, combine them into ONE task.
+    
+    Examples:
+    - "Schedule a follow-up call next week and discuss pricing" → ONE task: "Follow-up call to discuss pricing"
+    - "Send proposal by Friday" → ONE task: "Send proposal"  
+    - "Remind me to check in, call them, and ask about their decision" → ONE task: "Follow-up call to check decision status"
 
     Return a JSON object:
     {
       "hasTasks": true/false,
       "tasks": [
         {
-          "title": "Task title",
-          "description": "Brief description",
+          "title": "Comprehensive task title",
+          "description": "Detailed description covering all related action items",
           "dueDate": "YYYY-MM-DD",
           "priority": "low" | "medium" | "high"
         }
@@ -260,7 +261,7 @@ export const extractTasksFromPrompt = async (
     }
 
     If no tasks are found, return {"hasTasks": false, "tasks": []}.
-    Be thorough - extract ALL actionable items from the instruction.
+    Remember: Quality over quantity - one well-structured task is better than many duplicated ones.
   `;
 
     try {
