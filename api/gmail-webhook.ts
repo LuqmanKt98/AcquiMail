@@ -11,17 +11,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-        // Parse the Pub/Sub message
-        const pubsubMessage = req.body.message;
+        let notification: { emailAddress?: string; historyId?: string };
 
-        if (!pubsubMessage) {
-            console.log('⚠️ No Pub/Sub message in request body');
-            return res.status(400).json({ error: 'Bad request - no message' });
+        // Handle both wrapped and no-wrapper Pub/Sub message formats
+        if (req.body.message && req.body.message.data) {
+            // Standard wrapped format: { message: { data: "base64..." } }
+            const messageData = Buffer.from(req.body.message.data, 'base64').toString('utf-8');
+            notification = JSON.parse(messageData);
+            console.log('📬 Received wrapped Pub/Sub message');
+        } else if (req.body.emailAddress || req.body.historyId) {
+            // No-wrapper format: direct JSON body
+            notification = req.body;
+            console.log('📬 Received no-wrapper Pub/Sub message');
+        } else {
+            // Try parsing body as string (might be raw message)
+            try {
+                notification = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+                console.log('📬 Received raw message body');
+            } catch {
+                console.log('⚠️ Could not parse request body:', req.body);
+                return res.status(400).json({ error: 'Bad request - invalid message format' });
+            }
         }
-
-        // Decode the base64 message data
-        const messageData = Buffer.from(pubsubMessage.data, 'base64').toString('utf-8');
-        const notification = JSON.parse(messageData);
 
         console.log('📬 Gmail push notification received:', {
             emailAddress: notification.emailAddress,
@@ -30,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
         // Trigger notification to all connected clients via Firebase REST API
-        await triggerEmailSync(notification.historyId);
+        await triggerEmailSync(notification.historyId || 'unknown');
 
         // Respond to Pub/Sub immediately (must be within 10 seconds)
         res.status(200).json({
