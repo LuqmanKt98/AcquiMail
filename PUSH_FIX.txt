@@ -1,0 +1,23 @@
+// COPY THIS CODE AND REPLACE LINES 2266-2274 in src/App.tsx
+
+const unsubscribe = onValue(syncTriggerRef, async (snapshot) => {
+  if (snapshot.exists()) {
+    const data = snapshot.val();
+    const timestamp = data.timestamp || 0;
+    const lastProcessed = parseInt(localStorage.getItem('lastPushTimestamp') || '0', 10);
+    
+    // Only process if this is a new notification (prevent duplicates)
+    if (timestamp > lastProcessed) {
+      console.log('🔔 Push notification trigger received:', data);
+      localStorage.setItem('lastPushTimestamp', timestamp.toString());
+      
+      try {
+        console.log('📥 Fetching emails triggered by push notification...');
+        await fetchEmailReplies();
+        console.log('✅ Push-triggered email fetch complete');
+      } catch (error) {
+        console.error('❌ Error fetching emails from push:', error);
+      }
+    }
+  }
+});

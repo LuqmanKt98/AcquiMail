@@ -2263,15 +2263,28 @@ const AppContent = () => {
   useEffect(() => {
     const syncTriggerRef = ref(realtimeDb, 'emailSyncTrigger');
 
-    const unsubscribe = onValue(syncTriggerRef, (snapshot) => {
+    const unsubscribe = onValue(syncTriggerRef, async (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        console.log('🔔 Push notification trigger received:', data);
+        const timestamp = data.timestamp || 0;
+        const lastProcessed = parseInt(localStorage.getItem('lastPushTimestamp') || '0', 10);
 
-        // Immediately fetch new emails
-        handleFetchEmails();
+        // Only process if this is a new notification (prevent duplicates)
+        if (timestamp > lastProcessed) {
+          console.log('🔔 Push notification trigger received:', data);
+          localStorage.setItem('lastPushTimestamp', timestamp.toString());
+
+          try {
+            console.log('📥 Fetching emails triggered by push notification...');
+            await fetchEmailReplies();
+            console.log('✅ Push-triggered email fetch complete');
+          } catch (error) {
+            console.error('❌ Error fetching emails from push:', error);
+          }
+        }
       }
     });
+
 
     return () => unsubscribe();
   }, []);
