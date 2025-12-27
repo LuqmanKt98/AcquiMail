@@ -1,0 +1,42 @@
+{
+    "rules": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "emailSyncTrigger": {
+            ".read": "auth != null",
+            ".write": true
+        },
+        "leads": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "tasks": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "drafts": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "emails": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "files": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "deletedEmails": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "sentMessages": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        },
+        "settings": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+        }
+    }
+}

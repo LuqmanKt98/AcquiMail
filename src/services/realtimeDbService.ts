@@ -15,6 +15,9 @@ import {
 import { realtimeDb } from '../lib/firebase';
 import { Lead, Task, EmailDraft, IncomingEmail, FileAsset, SmtpConfig } from '../types';
 
+// Export realtimeDb for direct access
+export { realtimeDb };
+
 // Database path references
 const LEADS_PATH = 'leads';
 const TASKS_PATH = 'tasks';

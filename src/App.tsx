@@ -46,6 +46,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Lead, LeadStatus, EmailDraft, ViewState, FileAsset, IncomingEmail, LeadType, Task } from './types';
 import { generateEmailForLead, generateFollowUpEmail, processCallLog, extractTasksFromPrompt, extractTasksFromEmail } from './services/openaiService';
 import { sendEmailProfessional, fetchEmailReplies, startEmailMonitoring } from './services/emailService';
+import { ref, onValue } from 'firebase/database';
+import { realtimeDb } from './services/realtimeDbService';
 import {
   onLeadsChange,
   addLead as addLeadToFirestore,
@@ -232,7 +234,8 @@ const Sidebar = ({
     return stored ? parseInt(stored, 10) : 0;
   });
 
-  // Determine if there are NEW items (more than last seen)
+  // Show notification dot ONLY when NEW items arrive (more than last seen)
+  // This makes the dot appear in real-time when new emails/tasks are added
   const hasNewEmails = unreadEmails > lastSeenEmails;
   const hasNewTasks = newTasks > lastSeenTasks;
 
@@ -319,9 +322,12 @@ const Sidebar = ({
               >
                 <Icon size={20} />
                 <span className="font-medium">{item.label}</span>
-                {/* Blinking Notification Dot */}
+                {/* Blinking Notification Dot - Enhanced visibility */}
                 {item.hasNotification && currentView !== item.id && (
-                  <span className="absolute right-4 w-2.5 h-2.5 bg-blue-400 rounded-full animate-pulse shadow-lg shadow-blue-400/50" />
+                  <span className="absolute right-4 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500 shadow-lg shadow-blue-500/50"></span>
+                  </span>
                 )}
               </button>
             );
@@ -989,7 +995,7 @@ const TasksView = ({
                 className="flex-1 min-w-0 cursor-pointer"
                 onClick={() => setSelectedTask(task)}
               >
-                <p className={`font-semibold text-slate-800 dark:text-slate-100 truncate ${task.completed ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
+                <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
                   {task.title}
                 </p>
                 <div className="flex flex-wrap items-center gap-3 mt-1">
@@ -1100,12 +1106,12 @@ const TasksView = ({
                         updateTask(updated);
                       }}
                       className={`flex-1 py-2 px-4 rounded-lg font-bold text-sm uppercase tracking-wider transition-all ${selectedTask.priority === priority
-                          ? priority === 'high'
-                            ? 'bg-red-500 text-white shadow-lg'
-                            : priority === 'medium'
-                              ? 'bg-orange-500 text-white shadow-lg'
-                              : 'bg-slate-500 text-white shadow-lg'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        ? priority === 'high'
+                          ? 'bg-red-500 text-white shadow-lg'
+                          : priority === 'medium'
+                            ? 'bg-orange-500 text-white shadow-lg'
+                            : 'bg-slate-500 text-white shadow-lg'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
                         }`}
                     >
                       {priority}
@@ -1139,8 +1145,8 @@ const TasksView = ({
                     updateTask(updated);
                   }}
                   className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all ${selectedTask.completed
-                      ? 'bg-green-500 border-green-500 text-white'
-                      : 'border-slate-300 dark:border-slate-500 text-transparent hover:border-green-500 hover:scale-110'
+                    ? 'bg-green-500 border-green-500 text-white'
+                    : 'border-slate-300 dark:border-slate-500 text-transparent hover:border-green-500 hover:scale-110'
                     }`}
                 >
                   <Check size={18} strokeWidth={3} />
@@ -2233,6 +2239,43 @@ const AppContent = () => {
     };
   }, []);
 
+  // Initialize baseline counts on first load (prevent dots for existing items)
+  useEffect(() => {
+    const hasInitialized = localStorage.getItem('notificationInitialized');
+
+    if (!hasInitialized && emails.length > 0) {
+      // Set initial baseline for emails
+      const unreadCount = emails.filter(e => !e.read).length;
+      localStorage.setItem('lastSeenEmailCount', unreadCount.toString());
+
+      // Set initial baseline for tasks
+      const incompleteCount = tasks.filter(t => !t.completed).length;
+      localStorage.setItem('lastSeenTaskCount', incompleteCount.toString());
+
+      // Mark as initialized
+      localStorage.setItem('notificationInitialized', 'true');
+
+      console.log(`📊 Notification baseline initialized: ${unreadCount} emails, ${incompleteCount} tasks`);
+    }
+  }, [emails, tasks]);
+
+  // Listen for push notification triggers from webhook
+  useEffect(() => {
+    const syncTriggerRef = ref(realtimeDb, 'emailSyncTrigger');
+
+    const unsubscribe = onValue(syncTriggerRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        console.log('🔔 Push notification trigger received:', data);
+
+        // Immediately fetch new emails
+        handleFetchEmails();
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // Apply Theme
   useEffect(() => {
     if (theme === 'dark') {
@@ -2244,10 +2287,14 @@ const AppContent = () => {
 
   // Real-time Gmail API email monitoring
   useEffect(() => {
-    console.log('🚀 Starting Gmail API real-time monitoring...');
+    console.log('🚀 Starting Gmail API with Push Notifications...');
 
-    // Start monitoring - checks every 30 seconds
-    const stopMonitoring = startEmailMonitoring();
+    // Start monitoring with Push Notifications
+    // If push fails, automatically falls back to fast polling (10-15 seconds)
+    const stopMonitoring = startEmailMonitoring(
+      undefined, // No callback needed
+      'projects/acquimail-44077/topics/gmail-push' // Your Pub/Sub topic
+    );
 
     // Cleanup when component unmounts
     return () => {
